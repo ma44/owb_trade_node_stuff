@@ -1,0 +1,421 @@
+on_actions = {
+	#
+	on_startup = {
+		effect = {
+			every_country = {
+				update_node_ai = yes
+			}
+			1 = {
+				organization_stock_initalize = yes
+				organization_initialize = yes
+			}
+		}
+	}
+	on_annex = {
+		effect = {
+			if = {
+				limit = {
+					has_game_rule = {
+						rule = caps_system_toggle
+						option = ENABLED
+					}
+				}
+				scoped_sound_effect = "ui_items_bottlecaps_up_01"
+				set_temp_variable = { annexation_caps = FROM.caps_number_display }
+				divide_temp_variable = { annexation_caps = 2 }
+				clamp_temp_variable = { var = annexation_caps min = 0 max = 1000 }
+				round_variable = annexation_caps
+				if = {
+					limit = {
+						has_global_flag = caps_debug_logs
+					}
+					log = "Annexing [FROM.GetName] caps for [?annexation_caps]"
+				}
+				set_temp_variable = { caps_daily_diff = annexation_caps }
+				add_caps = yes
+
+				if = {
+					limit = { has_global_flag = caps_debug_logs }
+					log = "[GetDateText]: [Root.GetName] Annexed [FROM.GetName] taking [?annexation_caps] caps"
+				}
+				###CHANGE TO UPDATE DAILY = 0
+				FROM = {
+					clear_variable = caps_base
+					clear_variable = caps_daily_modified
+					clear_variable = caps_number_display
+					clear_variable = slave_number_display
+					clear_variable = slave_capture_rate
+					clear_variable = slave_monthly
+				}
+			}
+			#caps_country_initialize = yes
+		}
+	}
+
+	### Update important node functions
+	###UPDATE FOR MULTIPLE ROUTES PER STATE
+	on_state_control_changed = {
+		effect = {
+			if = {
+				limit = {
+					has_game_rule = {
+						rule = caps_system_toggle
+						option = ENABLED
+					}
+					FROM.FROM = {
+						is_in_array = {
+							array = global.nodes_states
+							value = THIS.id
+						}
+					}
+				}
+				### Add conquering caps
+				ROOT = {
+					### Debugger
+					set_variable = { temp_delta_capture = caps_income }
+
+					set_temp_variable = {
+						caps_to_add = 0
+					}
+					FROM.FROM = {
+						add_to_temp_variable = {
+							caps_to_add = node_value
+						}
+					}
+					multiply_temp_variable = { caps_to_add = 10 }
+					add_caps = yes
+					FROM = {
+						multiply_temp_variable = { caps_to_add = -0.75 }
+						add_caps = yes
+					}
+				}
+				#### Remove from old array
+				FROM = {
+					remove_from_array = {
+						array = state_controlled_nodes
+						value = FROM.FROM.id
+					}
+				}
+				### Add to new countries' array. Add organizations to new country
+				ROOT = {
+					add_to_array = {
+						array = state_controlled_nodes
+						value = FROM.FROM.id
+					}
+					for_each_loop = {
+						array = FROM.FROM.node_organizations
+						if = {
+							limit = {
+								NOT = {
+									is_in_array = {
+										array = country_organizations
+										value = v
+									}
+								}
+							}
+							add_to_array = {
+								array = country_organizations
+								value = v
+							}
+							add_to_array = {
+								array = ROOT.country_icon_popup_array
+								value = 6
+							}
+							add_to_array = {
+								array = ROOT.country_icon_popup_array_target
+								value = FROM.FROM.id
+							}
+							add_to_array = {
+								array = ROOT.country_icon_popup_array_tertiary
+								value = v
+							}
+						}
+					}
+				}
+				### Disabling node
+				FROM.FROM = {
+					if = {
+						limit = {
+							NOT = { has_state_flag = state_node_disabled }
+						}
+						### Copied code from disable_node adapted to this application
+						FROM = {
+
+							set_temp_variable = { caps_variable_temp = caps_node_income }
+							#log = "DEBUG CONTROLLER FOR DISABLE: [THIS.GetName]"
+							#log = "[?caps_node_income] node income before"
+							#log = "[?caps_income] total income before"
+							###Continuity of variables for some reaosn
+							set_temp_variable = { caps_daily_diff_before = PREV.node_value }
+							set_temp_variable = { caps_daily_diff_after = 0 }
+							if = {
+								limit = {
+									### Calculate caps diff + dumb trigger
+									get_caps_daily_difference = yes
+									always = yes
+								}
+								###caps_daily_temp set from trigger
+								###Set controller's new node income
+								set_variable = { caps_node_income = caps_daily_temp }
+								#log = "[?caps_node_income] node income after"
+							}
+							###Send passthrough to update controller's actual income.
+							set_temp_variable = {
+								caps_daily_diff = caps_diff_passthrough
+							}
+							update_caps_income = yes
+						}
+						set_state_flag = state_node_disabled
+						set_temp_variable = { duration_node_disabled = 30 }
+						ROOT = {
+							hidden_effect = {
+								activate_targeted_decision = {
+									decision = state_node_disabled_mission
+									target = PREV
+								}
+							}
+						}
+					}
+					### Refresh duration
+					else_if = {
+						limit = {
+							has_state_flag = state_node_disabled
+						}
+						FROM = {
+							if = {
+								limit = {
+									has_active_mission = state_node_disabled_mission
+								}
+								remove_mission = state_node_disabled_mission
+							}
+						}
+						set_temp_variable = { duration_node_disabled = 30 }
+						ROOT = {
+							hidden_effect = {
+								activate_targeted_decision = {
+									decision = state_node_disabled_mission
+									target = PREV
+								}
+							}
+						}
+					}
+				}
+				if = {
+					limit = {
+						FROM.FROM = {
+							has_state_flag = main_node_@FROM
+						}
+					}
+					FROM = {
+						set_variable = {
+							var = global.main_node_fallen
+							value = FROM.FROM
+						}
+						country_event = {
+							id = node_events.2
+						}
+					}
+					FROM.FROM = {
+						clr_state_flag = main_node_@FROM
+						update_node_value = yes
+					}
+					FROM.FROM = {
+						clr_state_flag = main_node_@FROM
+					}
+				}
+				ROOT = {
+					subtract_from_variable = { temp_delta_capture = caps_income }
+					if = {
+						limit = {
+							ROOT = {
+								is_ai = no
+							}
+						}
+						add_to_array = {
+							array = logger_historical_captured_nodes
+							value = FROM.FROM.id
+						}
+						add_to_array = {
+							array = logger_historical_capture_delta
+							value = temp_delta_capture
+						}
+						if = {
+							limit = {
+								check_variable = {
+									logger_historical_net^num > 5
+								}
+							}
+							remove_from_array = {
+								array = logger_historical_capture_delta
+								index = 0
+							}
+							remove_from_array = {
+								array = logger_historical_captured_nodes
+								index = 0
+							}
+						}
+					}
+					clear_variable = temp_delta_capture
+				}
+			}
+		}
+	}
+
+	### Catch for civil war issues
+	###FROM is war target.
+	#Income Calculations
+	on_monthly = {
+		effect = {
+			if = {
+				limit = {
+					has_game_rule = {
+						rule = caps_system_toggle
+						option = ENABLED
+					}
+					owns_state = 1
+				}
+				###MONTHLY
+				### UPDATE TO MATCH NEW ORGS
+				add_to_variable = { global.gun_runner_inventory = 900 }
+				add_to_variable = { global.motorized_runner_inventory = 150 }
+				add_to_variable = { global.energy_runner_inventory = 130 }
+				add_to_variable = { global.melee_runner_inventory = 1200 }
+				add_to_variable = { global.advanced_runner_inventory = 200 }
+				clamp_variable = {
+					var = global.gun_runner_inventory
+					max = 25000
+					min = 0
+				}
+				clamp_variable = {
+					var = global.motorized_runner_inventory
+					max = 25000
+					min = 0
+				}
+				clamp_variable = {
+					var = global.energy_runner_inventory
+					max = 25000
+					min = 0
+				}
+				clamp_variable = {
+					var = global.melee_runner_inventory
+					max = 25000
+					min = 0
+				}
+				clamp_variable = {
+					var = global.advanced_runner_inventory
+					max = 25000
+					min = 0
+				}
+			}
+			if = {
+				limit = {
+					has_global_flag = caps_ai_limiter_enabled
+				}
+				if = {
+					limit = {
+						AND = {
+							set_temp_variable = { temp_total_income = caps_daily_modified }
+							###add_to_temp_variable = { temp_total_income = modifier@caps_flat_income_modifier }
+							check_variable = {
+								temp_total_income < 0
+							}
+							check_variable = { caps_number_display < 500 }
+							NOT = { surrender_progress > 0.25 }
+						}
+					}
+					log = "[THIS.GetTag] limiter enabled temp income: [?temp_total_income]"
+				}
+				else = {
+					log = "[THIS.GetTag] limiter disabled temp_income: [?temp_total_income]"
+				}
+			}
+			#### Caps monthly gui tick
+			if = {
+				limit = {
+					owns_state = 1
+				}
+				add_to_variable = { global.monthly_gui_update_tick = 1 }
+				if = {
+					limit = {
+						has_global_flag = caps_debug_logs_enabled
+					}
+					add_to_variable = {
+						global.caps_debugger_time = 1
+					}
+					add_to_variable = { global.current_month_number = 1 }
+				}
+			}
+		}
+	}
+	on_daily = {
+		effect = {
+			if = {
+				limit = {
+					is_ai = no
+					has_game_rule = {
+						rule = caps_system_toggle
+						option = ENABLED
+					}
+				}
+				for_each_scope_loop = {
+					array = state_controlled_nodes
+					if = {
+						limit = {
+							#### Check for node level up progress
+							set_temp_variable = { node_progress_temp = node_progress }
+							subtract_from_temp_variable = { node_progress_temp = node_level }
+							check_variable = { var = node_progress_temp value = 1 compare = greater_than_or_equals }
+							NOT = {
+								is_in_array = {
+									array = ROOT.country_icon_popup_array_target
+									value = THIS.id
+								}
+							}
+							NOT = { has_state_flag = notification_disable }
+						}
+						### Index of alert type
+						add_to_array = {
+							array = ROOT.country_icon_popup_array
+							value = 1
+						}
+						add_to_array = {
+							array = ROOT.country_icon_popup_array_target
+							value = THIS.id
+						}
+						set_temp_variable = { rounded_progress = node_progress }
+						round_temp_variable = rounded_progress
+						add_to_array = {
+							array = ROOT.country_icon_popup_array_tertiary
+							value = rounded_progress
+						}
+					}
+					#### Disabled notification
+					if = {
+						limit = {
+							has_state_flag = state_node_disabled
+							NOT = {
+								is_in_array = {
+									array = ROOT.country_icon_popup_array_target
+									value = THIS.id
+								}
+							}
+							NOT = { has_state_flag = notification_disable }
+						}
+						add_to_array = {
+							array = ROOT.country_icon_popup_array
+							value = 2
+						}
+						add_to_array = {
+							array = ROOT.country_icon_popup_array_target
+							value = THIS.id
+						}
+						add_to_array = {
+							array = ROOT.country_icon_popup_array_tertiary
+							value = 0
+						}
+					}
+				}
+			}
+		}
+	}
+}
